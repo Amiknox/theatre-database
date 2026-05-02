@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Theatre Database</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="config.js"></script>
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">Private theatre records</p>
+        <h1>Theatre Database</h1>
+      </div>
+      <nav class="tabs" aria-label="Main navigation">
+        <button class="tab is-active" data-route="search" type="button">Search</button>
+        <button class="tab" data-route="add" type="button">Add Entry</button>
+        <button class="tab" data-route="actors" type="button">Actors</button>
+        <button class="tab" data-route="tools" type="button">Tools</button>
+      </nav>
+    </header>
+
+    <main id="app" class="app-shell" tabindex="-1"></main>
+
+    <template id="cast-row-template">
+      <div class="cast-edit-row">
+        <label>
+          <span>Character</span>
+          <input name="character" type="text" autocomplete="off">
+        </label>
+        <label>
+          <span>Actor</span>
+          <input name="actor" type="text" autocomplete="off">
+        </label>
+        <button class="icon-button remove-cast" type="button" aria-label="Remove cast row" title="Remove cast row">X</button>
+      </div>
+    </template>
+
+    <script src="app.js" type="module"></script>
+  </body>
+</html>

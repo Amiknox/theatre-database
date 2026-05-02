@@ -1,0 +1,48 @@
+I want you to build a new app - "Theatre database". It is essentially front-end for a database that records shows that specific people have attended. It should be modelled on the core functionality of imdb.com - you should be able to search by show and find the cast, or actor and find all of the other things that they have been in. Below are my thoughts on how this should work. Break this down into as many discrete tasks as you need to in order to do it properly without creating errors in the data. If you need me to do something, give me very specific, clear instructions. If you think there is a better way to design or build the app, bring it up. 
+
+Fields:
+
+"Play" - text
+"Book" - text
+"Music" - text
+"Lyrics" - text
+"Adapted by" - 
+"Director" - text
+"Theatre" - text
+"Cast" - this field is slightly complicated. For each role in a play there will be a "Character name" and an "Actor name". These two need to be linked properly in the database, and when a user calls up a play they should be displayed side by side. 
+"Run" - date range
+"Date seen" - date
+"Attendees" - multi-select from list of names (including "Andrew", "Tina", "Mac", "Alice", "Jonathan", "Jo", "Oda", "Viv", "Adam")
+"Notes" - text
+
+Adding to database:
+
+Initially - I have attached a spreadsheet with a list of entries. I want you to read this spreadsheet and automatically add its contents to the database. 
+
+
+In these spreadsheets 
+-"Date seen" is listed as "Date" and appears in column A. 
+- "Play" is listed as "Play" in column B
+- "Book" is listed as "Author"
+- "Adapted by" is listed as "Adapted by" in column D
+- "Director" is listed as "Director" in column E
+- "Theatre" is listed as "Theatre" in column F
+
+Thereafter all columns are devoted to cast members. Each spans two columns, labelled as "[ordinal number] billed", where the left hand column of the pair is the name of the character and the left hand side is the name of the actor. E.g. columns G and H are "1st billed", columns I and J are "2nd billed".
+ 
+As a worked example, the first entry of the spreadsheet is row 3, and the fields should show
+
+"Play" - "Leopoldstadt" (B3)
+"Book" - "Tom Stoppard" (C3)
+"Music" - [not on spreadsheet - ignore for all entries]
+"Lyrics" - [not on spreadsheet - ignore for all entries]
+"Adapted by" - [blank in this example, ignore for this entry by generally add whatever is in column D]
+"Director" - "Patrick Marber" (E3)
+"Theatre" - "Wyndham" (F3)
+"Cast" - For the "1st Billed" the character name is "Jacob/Nathan/Ludwig" (G3) and the actor name is "Sebastian Armesto" (H3). For the "2nd billed" the character name is "Rosa" and the actor name is "Jenna Augen" etc
+"Run" - [not on spreadsheet - ignore for all entries]
+"Date seen" - "04/09/2021" (A3)
+
+
+Manually - it should be possible for a user to add new entries to the database. Create and "Add entry" screen where the user can fill in all the fields and add an entry to the database. For the "Cast", initially give the user one linked pair (a "Character" and "Actor"
+
