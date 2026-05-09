@@ -171,7 +171,7 @@ label span,
 }
 
 .result-card,
-.actor-card,
+.entity-card,
 .panel,
 .empty-state {
   border: 1px solid var(--line);
@@ -181,13 +181,13 @@ label span,
 }
 
 .result-card,
-.actor-card {
+.entity-card {
   padding: 16px;
   text-align: left;
 }
 
 .result-card button,
-.actor-card button,
+.entity-card button,
 .link-button {
   border: 0;
   background: transparent;

@@ -261,8 +261,8 @@ function navigate(route, replace = false) {
 
 function getRoute() {
   const hash = location.hash.replace(/^#\/?/, "");
-  const [name = "search", id = ""] = hash.split("/");
-  return { name, id: decodeURIComponent(id) };
+  const [name = "search", ...rest] = hash.split("/");
+  return { name, id: decodeURIComponent(rest.join("/")) };
 }
 
 function render() {
@@ -278,6 +278,7 @@ function render() {
 
   if (route.name === "show") return renderShow(route.id);
   if (route.name === "actor") return renderActor(route.id);
+  if (route.name === "entity") return renderEntity(route.id);
   if (route.name === "add") return renderForm();
   if (route.name === "edit") return renderForm(route.id);
   if (route.name === "actors") return renderActors();
@@ -343,6 +344,7 @@ function canEdit() {
 
 function topLevelRoute(name) {
   if (name === "show") return "search";
+  if (name === "entity") return "search";
   if (name === "actor") return "actors";
   if (name === "edit") return "add";
   return name;
@@ -394,12 +396,21 @@ function renderSearch() {
   const query = app.querySelector("#query");
   const field = app.querySelector("#field-filter");
   const attendee = app.querySelector("#attendee-filter");
-  const update = () => drawResults(filterShows(query.value, field.value, attendee.value));
+  const update = () => drawSearchResults(query.value, field.value, attendee.value);
   query.addEventListener("input", update);
   field.addEventListener("change", update);
   attendee.addEventListener("change", update);
   update();
   query.focus();
+}
+
+function drawSearchResults(query, field, attendee) {
+  const entities = matchingEntities(query, field, attendee);
+  if (entities) {
+    drawEntityResults(entities);
+    return;
+  }
+  drawResults(filterShows(query, field, attendee));
 }
 
 function drawResults(shows) {
@@ -420,6 +431,38 @@ function drawResults(shows) {
   results.querySelectorAll("[data-show]").forEach((button) => {
     button.addEventListener("click", () => navigate(`show/${encodeURIComponent(button.dataset.show)}`));
   });
+}
+
+function drawEntityResults(entities) {
+  app.querySelector("#result-count").textContent = `${entities.length} ${entities.length === 1 ? "result" : "results"}`;
+  const results = app.querySelector("#results");
+  if (!entities.length) {
+    results.innerHTML = `<div class="empty-state">No matching results yet.</div>`;
+    return;
+  }
+  results.innerHTML = renderEntityCards(entities);
+  bindEntityCards(results);
+}
+
+function matchingEntities(query, field, attendee) {
+  const needle = query.trim().toLowerCase();
+  const entityFields = entitySearchFields(field);
+  if (!entityFields.length) return null;
+  const shows = attendee ? state.shows.filter((show) => show.attendees.includes(attendee)) : state.shows;
+  const entities = entityIndex(shows, entityFields)
+    .filter((entity) => !needle || entity.name.toLowerCase().includes(needle));
+  if (field !== "all") return entities;
+  if (!needle) return null;
+  return entities.length ? entities : null;
+}
+
+function entitySearchFields(field) {
+  if (field === "all") {
+    return ["actor", "character", "dateSeen", "book", "music", "lyrics", "adaptedBy", "director", "theatre", "run", "attendees", "notes"];
+  }
+  if (field === "cast") return ["actor", "character"];
+  if (field === "play") return [];
+  return [field];
 }
 
 function filterShows(query, field, attendee) {
@@ -638,7 +681,7 @@ function readShowForm(form, id) {
 }
 
 function renderActors() {
-  const actors = actorIndex();
+  const actors = entityIndex(state.shows, ["actor"]);
   app.innerHTML = `
     ${renderAccountBar()}
     <section>
@@ -657,16 +700,8 @@ function renderActors() {
     const needle = query.value.trim().toLowerCase();
     const filtered = actors.filter((actor) => actor.name.toLowerCase().includes(needle));
     const target = app.querySelector("#actors");
-    target.innerHTML = filtered.length ? filtered.map((actor) => `
-      <article class="actor-card">
-        <button type="button" data-actor="${escapeAttr(actor.name)}">${escapeHtml(actor.name)}</button>
-        <p class="meta">${actor.credits.length} ${actor.credits.length === 1 ? "credit" : "credits"}</p>
-        <p>${escapeHtml(actor.credits.slice(0, 3).map((credit) => credit.play).join(", "))}</p>
-      </article>
-    `).join("") : `<div class="empty-state">No actors found.</div>`;
-    target.querySelectorAll("[data-actor]").forEach((button) => {
-      button.addEventListener("click", () => navigate(`actor/${encodeURIComponent(button.dataset.actor)}`));
-    });
+    target.innerHTML = filtered.length ? renderEntityCards(filtered) : `<div class="empty-state">No actors found.</div>`;
+    bindEntityCards(target);
   };
   query.addEventListener("input", draw);
   draw();
@@ -703,17 +738,141 @@ function renderActor(name) {
   });
 }
 
-function actorIndex() {
+function renderEntity(encoded) {
+  const { field, value } = parseEntityRoute(encoded);
+  const definition = entityDefinition(field);
+  const entity = entityIndex(state.shows, [field]).find((item) => sameName(item.name, value));
+  const credits = entity?.credits || [];
+
+  app.innerHTML = `
+    ${renderAccountBar()}
+    <section class="panel">
+      <button class="link-button" id="back" type="button">Back to search</button>
+      <p class="eyebrow">${escapeHtml(definition.label)}</p>
+      <h2>${escapeHtml(value || "Untitled")}</h2>
+      <div class="result-grid">
+        ${credits.length ? credits.map((credit) => `
+          <article class="result-card">
+            <button type="button" data-show="${credit.show.id}">${escapeHtml(credit.show.play || "Untitled play")}</button>
+            <p class="meta">${compact([credit.detail, formatDate(credit.show.dateSeen), credit.show.theatre]).map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</p>
+          </article>
+        `).join("") : `<div class="empty-state">No matching entries recorded.</div>`}
+      </div>
+    </section>
+  `;
+  bindAccountBar();
+  app.querySelector("#back").addEventListener("click", () => navigate("search"));
+  app.querySelectorAll("[data-show]").forEach((button) => {
+    button.addEventListener("click", () => navigate(`show/${encodeURIComponent(button.dataset.show)}`));
+  });
+}
+
+function renderEntityCards(entities) {
+  return entities.map((entity) => `
+    <article class="entity-card">
+      <button type="button" ${entity.field === "actor"
+        ? `data-actor="${escapeAttr(entity.name)}"`
+        : `data-entity="${escapeAttr(entityRoute(entity.field, entity.name))}"`}>
+        ${escapeHtml(entity.name)}
+      </button>
+      <p class="meta">
+        <span>${escapeHtml(entity.label)}</span>
+        <span>${entity.credits.length} ${entity.credits.length === 1 ? "entry" : "entries"}</span>
+      </p>
+      <p>${escapeHtml(entity.credits.slice(0, 3).map((credit) => credit.play).join(", "))}</p>
+    </article>
+  `).join("");
+}
+
+function bindEntityCards(container) {
+  container.querySelectorAll("[data-actor]").forEach((button) => {
+    button.addEventListener("click", () => navigate(`actor/${encodeURIComponent(button.dataset.actor)}`));
+  });
+  container.querySelectorAll("[data-entity]").forEach((button) => {
+    button.addEventListener("click", () => navigate(`entity/${button.dataset.entity}`));
+  });
+}
+
+function actorIndex(shows = state.shows) {
+  return entityIndex(shows, ["actor"]).map((entity) => ({
+    name: entity.name,
+    credits: entity.credits.map((credit) => ({
+      play: credit.play,
+      character: credit.detail,
+      showId: credit.show.id
+    }))
+  }));
+}
+
+function entityIndex(shows = state.shows, fields = entitySearchFields("all")) {
   const map = new Map();
-  state.shows.forEach((show) => {
-    show.cast.forEach((row) => {
-      if (!row.actor) return;
-      const key = normalizeName(row.actor);
-      if (!map.has(key)) map.set(key, { name: row.actor, credits: [] });
-      map.get(key).credits.push({ play: show.play, character: row.character, showId: show.id });
+  shows.forEach((show) => {
+    fields.forEach((field) => {
+      entityValues(show, field).forEach(({ value, detail }) => {
+        if (!value) return;
+        const key = `${field}:${normalizeName(value)}`;
+        if (!map.has(key)) map.set(key, {
+          field,
+          label: entityDefinition(field).label,
+          name: value,
+          credits: []
+        });
+        map.get(key).credits.push({ show, play: show.play, detail });
+      });
     });
   });
-  return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
+  return [...map.values()].sort((a, b) => {
+    const labelCompare = a.label.localeCompare(b.label);
+    if (labelCompare) return labelCompare;
+    return a.name.localeCompare(b.name);
+  });
+}
+
+function entityValues(show, field) {
+  const definitions = {
+    actor: () => show.cast.map((row) => ({ value: row.actor, detail: row.character })),
+    character: () => show.cast.map((row) => ({ value: row.character, detail: row.actor })),
+    dateSeen: () => [{ value: formatDate(show.dateSeen) || show.dateSeen, detail: show.theatre }],
+    book: () => [{ value: show.book, detail: show.play }],
+    music: () => [{ value: show.music, detail: show.play }],
+    lyrics: () => [{ value: show.lyrics, detail: show.play }],
+    adaptedBy: () => [{ value: show.adaptedBy, detail: show.play }],
+    director: () => [{ value: show.director, detail: show.theatre }],
+    theatre: () => [{ value: show.theatre, detail: formatDate(show.dateSeen) }],
+    run: () => [{ value: formatRun(show), detail: show.theatre }],
+    attendees: () => show.attendees.map((name) => ({ value: name, detail: formatDate(show.dateSeen) })),
+    notes: () => [{ value: show.notes, detail: show.play }]
+  };
+  return definitions[field]?.().filter((item) => clean(item.value)) || [];
+}
+
+function entityDefinition(field) {
+  return {
+    actor: { label: "Actor" },
+    character: { label: "Character" },
+    dateSeen: { label: "Date seen" },
+    book: { label: "Book" },
+    music: { label: "Music" },
+    lyrics: { label: "Lyrics" },
+    adaptedBy: { label: "Adapted by" },
+    director: { label: "Director" },
+    theatre: { label: "Theatre" },
+    run: { label: "Run" },
+    attendees: { label: "Attendee" },
+    notes: { label: "Notes" }
+  }[field] || { label: "Result" };
+}
+
+function entityRoute(field, value) {
+  return `${encodeURIComponent(field)}/${encodeURIComponent(value)}`;
+}
+
+function parseEntityRoute(encoded) {
+  const [field = "", ...rest] = encoded.split("/");
+  return {
+    field,
+    value: rest.join("/")
+  };
 }
 
 function renderTools() {
