@@ -332,6 +332,7 @@ function renderAccountBar() {
     <div class="account-bar">
       <span>${escapeHtml(email)}</span>
       <span class="pill">${escapeHtml(role)}</span>
+      <span class="pill">${escapeHtml(dataSourceLabel())}</span>
       <button class="ghost-button" id="sign-out" type="button">Sign Out</button>
     </div>
   `;
@@ -347,6 +348,20 @@ function bindAccountBar() {
 
 function canEdit() {
   return !state.online || ["editor", "admin"].includes(state.userRole);
+}
+
+function dataSourceLabel() {
+  if (state.online && state.session) return "Supabase";
+  if (state.online) return "Sign-in required";
+  return "Local fallback";
+}
+
+function loadedCastCount() {
+  return state.shows.reduce((total, show) => total + show.cast.length, 0);
+}
+
+function loadedAttendeeCount() {
+  return state.shows.reduce((total, show) => total + show.attendees.length, 0);
 }
 
 function topLevelRoute(name) {
@@ -895,6 +910,34 @@ function renderTools() {
   app.innerHTML = `
     ${renderAccountBar()}
     <section class="split">
+      <article class="panel">
+        <h2>Database Status</h2>
+        <dl class="status-list">
+          <div>
+            <dt>Data source</dt>
+            <dd>${escapeHtml(dataSourceLabel())}</dd>
+          </div>
+          <div>
+            <dt>Entries loaded</dt>
+            <dd>${state.shows.length}</dd>
+          </div>
+          <div>
+            <dt>Cast rows loaded</dt>
+            <dd>${loadedCastCount()}</dd>
+          </div>
+          <div>
+            <dt>Attendee links loaded</dt>
+            <dd>${loadedAttendeeCount()}</dd>
+          </div>
+          <div>
+            <dt>Role</dt>
+            <dd>${escapeHtml(state.userRole || "not signed in")}</dd>
+          </div>
+        </dl>
+        ${state.online && state.session
+          ? `<p class="small">Changes are saved to the shared Supabase database.</p>`
+          : `<p class="small warning-text">Changes are not currently using the shared Supabase database.</p>`}
+      </article>
       <article class="panel">
         <h2>Data Tools</h2>
         <p class="small">${state.online ? "The shared database is stored in Supabase. Export JSON before bulk edits or migrations." : "The browser database is saved locally on this machine. Export JSON before major edits or before moving to a backend."}</p>

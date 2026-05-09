@@ -319,6 +319,36 @@ label span,
   font-weight: 700;
 }
 
+.status-list {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 14px;
+}
+
+.status-list div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 8px;
+}
+
+.status-list dt {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.status-list dd {
+  margin: 0;
+  text-align: right;
+  font-weight: 800;
+}
+
+.warning-text {
+  color: #9f4e16;
+  font-weight: 700;
+}
+
 .empty-state {
   padding: 28px;
   color: var(--muted);
