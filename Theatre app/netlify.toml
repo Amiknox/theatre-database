@@ -1,5 +1,6 @@
 [build]
   command = "node scripts/write_config.mjs"
+  ignore = "/bin/false"
   publish = "."
 
 [[headers]]
