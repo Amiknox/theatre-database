@@ -161,33 +161,40 @@ function saveShows(shows = state.shows) {
 }
 
 async function saveShow(show) {
-  if (!state.online) {
-    const existing = state.shows.some((item) => item.id === show.id);
-    saveShows(existing
-      ? state.shows.map((item) => item.id === show.id ? show : item)
-      : [...state.shows, show]);
+  try {
+    if (!state.online) {
+      const existing = state.shows.some((item) => item.id === show.id);
+      saveShows(existing
+        ? state.shows.map((item) => item.id === show.id ? show : item)
+        : [...state.shows, show]);
+      return { ok: true };
+    }
+
+    if (!canEdit()) return { ok: false, message: "This account can view entries but cannot edit them." };
+    const payload = showToRemote(show);
+    const { error: showError } = await state.supabase.from("shows").upsert(payload.show);
+    if (showError) return { ok: false, message: showError.message };
+
+    const { error: castDeleteError } = await state.supabase.from("cast_members").delete().eq("show_id", show.id);
+    if (castDeleteError) return { ok: false, message: castDeleteError.message };
+
+    const { error: attendeeDeleteError } = await state.supabase.from("show_attendees").delete().eq("show_id", show.id);
+    if (attendeeDeleteError) return { ok: false, message: attendeeDeleteError.message };
+
+    if (payload.cast.length) {
+      const { error } = await state.supabase.from("cast_members").insert(payload.cast);
+      if (error) return { ok: false, message: error.message };
+    }
+    if (payload.attendees.length) {
+      const { error } = await state.supabase.from("show_attendees").insert(payload.attendees);
+      if (error) return { ok: false, message: error.message };
+    }
+
+    state.shows = await loadShows();
     return { ok: true };
+  } catch (error) {
+    return { ok: false, message: error.message || "Save failed." };
   }
-
-  if (!canEdit()) return { ok: false, message: "This account can view entries but cannot edit them." };
-  const payload = showToRemote(show);
-  const { error: showError } = await state.supabase.from("shows").upsert(payload.show);
-  if (showError) return { ok: false, message: showError.message };
-
-  await state.supabase.from("cast_members").delete().eq("show_id", show.id);
-  await state.supabase.from("show_attendees").delete().eq("show_id", show.id);
-
-  if (payload.cast.length) {
-    const { error } = await state.supabase.from("cast_members").insert(payload.cast);
-    if (error) return { ok: false, message: error.message };
-  }
-  if (payload.attendees.length) {
-    const { error } = await state.supabase.from("show_attendees").insert(payload.attendees);
-    if (error) return { ok: false, message: error.message };
-  }
-
-  state.shows = await loadShows();
-  return { ok: true };
 }
 
 async function deleteShow(id) {
@@ -611,7 +618,7 @@ function renderForm(id = "") {
           <button class="ghost-button" id="add-cast-row" type="button">Add Cast Pair</button>
         </div>
         <div class="form-actions">
-          <button class="button" type="submit">${existing ? "Save Changes" : "Add Entry"}</button>
+          <button class="button" id="save-entry" type="submit">${existing ? "Save Changes" : "Add Entry"}</button>
           <button class="ghost-button" id="cancel" type="button">Cancel</button>
           <span id="form-status" class="status"></span>
         </div>
@@ -626,16 +633,25 @@ function renderForm(id = "") {
   app.querySelector("#cancel").addEventListener("click", () => existing ? navigate(`show/${encodeURIComponent(existing.id)}`) : navigate("search"));
   app.querySelector("#entry-form").addEventListener("submit", async (event) => {
     event.preventDefault();
+    const form = event.currentTarget;
+    const status = app.querySelector("#form-status");
+    const saveButton = app.querySelector("#save-entry");
+    status.textContent = "";
+    if (!form.reportValidity()) return;
     const saved = readShowForm(event.currentTarget, existing?.id);
     if (!saved.play) {
-      app.querySelector("#form-status").textContent = "Play is required.";
+      status.textContent = "Play is required.";
       return;
     }
+    saveButton.disabled = true;
+    status.textContent = "Saving...";
     const result = await saveShow(saved);
+    saveButton.disabled = false;
     if (!result.ok) {
-      app.querySelector("#form-status").textContent = result.message;
+      status.textContent = result.message;
       return;
     }
+    status.textContent = "Saved.";
     navigate(`show/${encodeURIComponent(saved.id)}`);
   });
 }
