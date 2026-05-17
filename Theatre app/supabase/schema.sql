@@ -28,8 +28,6 @@ create table if not exists public.shows (
   adapted_by text,
   director text,
   theatre text,
-  run_start date,
-  run_end date,
   notes text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()

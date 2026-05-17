@@ -83,6 +83,10 @@ h3 {
   gap: 8px;
 }
 
+.tabs.is-hidden {
+  display: none;
+}
+
 .tab,
 .button,
 .ghost-button,
@@ -271,6 +275,11 @@ label span,
 .attendee-list,
 .form-actions {
   grid-column: 1 / -1;
+}
+
+label:has([name="runStart"]),
+label:has([name="runEnd"]) {
+  display: none;
 }
 
 .cast-editor {

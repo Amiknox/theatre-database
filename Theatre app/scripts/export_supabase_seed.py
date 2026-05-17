@@ -25,15 +25,14 @@ def main():
     for show in shows:
         lines.append(
             "insert into public.shows "
-            "(id, play, date_seen, book, music, lyrics, adapted_by, director, theatre, run_start, run_end, notes) values "
+            "(id, play, date_seen, book, music, lyrics, adapted_by, director, theatre, notes) values "
             f"({sql(show['id'])}, {sql(show['play'])}, {sql(show['dateSeen'])}, {sql(show['book'])}, "
             f"{sql(show['music'])}, {sql(show['lyrics'])}, {sql(show['adaptedBy'])}, {sql(show['director'])}, "
-            f"{sql(show['theatre'])}, {sql(show['runStart'])}, {sql(show['runEnd'])}, {sql(show['notes'])}) "
+            f"{sql(show['theatre'])}, {sql(show['notes'])}) "
             "on conflict (id) do update set "
             "play = excluded.play, date_seen = excluded.date_seen, book = excluded.book, "
             "music = excluded.music, lyrics = excluded.lyrics, adapted_by = excluded.adapted_by, "
-            "director = excluded.director, theatre = excluded.theatre, run_start = excluded.run_start, "
-            "run_end = excluded.run_end, notes = excluded.notes;"
+            "director = excluded.director, theatre = excluded.theatre, notes = excluded.notes;"
         )
 
         for index, row in enumerate(show.get("cast", []), start=1):

@@ -10,8 +10,6 @@ const EMPTY_SHOW = {
   adaptedBy: "",
   director: "",
   theatre: "",
-  runStart: "",
-  runEnd: "",
   attendees: [],
   notes: "",
   cast: [{ character: "", actor: "" }]
@@ -24,7 +22,10 @@ let state = {
   supabase: null,
   session: null,
   userRole: "local",
-  authMessage: ""
+  authMessage: "",
+  localDataSource: "",
+  remoteCounts: null,
+  remoteCountsStatus: ""
 };
 
 const app = document.querySelector("#app");
@@ -33,18 +34,20 @@ const castTemplate = document.querySelector("#cast-row-template");
 init();
 
 async function init() {
+  bindNavigation();
+  renderLoading("Checking sign-in...");
   await initSupabase();
   if (state.online && !state.session) {
     state.loaded = true;
-    bindNavigation();
     renderAuth();
     return;
   }
+  renderLoading();
   state.shows = await loadShows();
   state.loaded = true;
-  bindNavigation();
   if (!location.hash) {
     navigate("search", true);
+    return;
   }
   render();
 }
@@ -60,16 +63,28 @@ async function initSupabase() {
   const config = window.THEATRE_CONFIG || {};
   if (!config.supabaseUrl || !config.supabaseAnonKey) return;
   try {
-    const { createClient } = await import(SUPABASE_MODULE_URL);
+    const { createClient } = await withTimeout(
+      import(SUPABASE_MODULE_URL),
+      12000,
+      "Supabase startup timed out."
+    );
     state.supabase = createClient(config.supabaseUrl, config.supabaseAnonKey);
     state.online = true;
-    const { data } = await state.supabase.auth.getSession();
+    const { data } = await withTimeout(
+      state.supabase.auth.getSession(),
+      12000,
+      "Sign-in check timed out."
+    );
     state.session = data.session;
     state.userRole = await loadUserRole();
     state.supabase.auth.onAuthStateChange(async (_event, session) => {
       state.session = session;
       state.userRole = await loadUserRole();
+      state.loaded = false;
+      renderLoading();
       state.shows = session ? await loadShows() : [];
+      state.remoteCounts = null;
+      state.remoteCountsStatus = "";
       state.loaded = true;
       render();
     });
@@ -89,6 +104,7 @@ async function loadShows() {
   if (stored) {
     try {
       const parsed = JSON.parse(stored);
+      state.localDataSource = "Browser localStorage";
       return normalizeShows(parsed.shows || []);
     } catch {
       localStorage.removeItem(STORE_KEY);
@@ -101,31 +117,56 @@ async function loadShows() {
     const parsed = await response.json();
     const shows = normalizeShows(parsed.shows || []);
     saveShows(shows);
+    state.localDataSource = "Seed JSON copied to browser localStorage";
     return shows;
   } catch {
+    state.localDataSource = "No local data loaded";
     return [];
   }
 }
 
 async function loadRemoteShows() {
-  const { data, error } = await state.supabase
-    .from("shows")
-    .select("*, cast_members(*), show_attendees(attendee)")
-    .order("date_seen", { ascending: false });
-  if (error) {
+  try {
+    const { data, error } = await withTimeout(
+      state.supabase
+        .from("shows")
+        .select("*, cast_members(*), show_attendees(attendee)")
+        .order("date_seen", { ascending: false }),
+      12000,
+      "Database read timed out."
+    );
+    if (error) {
+      state.authMessage = `Database read failed: ${error.message}`;
+      return [];
+    }
+    state.localDataSource = "Supabase";
+    return normalizeShows(data.map(remoteToShow));
+  } catch (error) {
     state.authMessage = `Database read failed: ${error.message}`;
     return [];
   }
-  return normalizeShows(data.map(remoteToShow));
 }
 
 async function loadUserRole() {
   if (!state.supabase) return "local";
-  const { data: sessionData } = await state.supabase.auth.getSession();
-  if (!sessionData.session) return "";
-  const { data, error } = await state.supabase.rpc("current_app_role");
-  if (error || !data) return "";
-  return data;
+  try {
+    const { data: sessionData } = await withTimeout(
+      state.supabase.auth.getSession(),
+      12000,
+      "Sign-in check timed out."
+    );
+    if (!sessionData.session) return "";
+    const { data, error } = await withTimeout(
+      state.supabase.rpc("current_app_role"),
+      12000,
+      "Role check timed out."
+    );
+    if (error || !data) return "";
+    return data;
+  } catch (error) {
+    state.authMessage = error.message;
+    return "";
+  }
 }
 
 function normalizeShows(shows) {
@@ -139,8 +180,6 @@ function normalizeShows(shows) {
     adaptedBy: clean(show.adaptedBy),
     director: clean(show.director),
     theatre: clean(show.theatre),
-    runStart: clean(show.runStart),
-    runEnd: clean(show.runEnd),
     attendees: Array.isArray(show.attendees) ? show.attendees.filter(Boolean) : [],
     notes: clean(show.notes),
     cast: normalizeCast(show.cast)
@@ -157,7 +196,31 @@ function normalizeCast(cast) {
 
 function saveShows(shows = state.shows) {
   state.shows = normalizeShows(shows);
+  state.localDataSource = "Browser localStorage";
   localStorage.setItem(STORE_KEY, JSON.stringify({ version: 1, shows: state.shows }, null, 2));
+}
+
+async function loadRemoteCounts() {
+  if (!state.online || !state.session) return null;
+  const tables = ["shows", "cast_members", "show_attendees", "app_users"];
+  const counts = {};
+  for (const table of tables) {
+    const { count, error } = await state.supabase
+      .from(table)
+      .select("*", { count: "exact", head: true });
+    if (error) throw new Error(`${table}: ${error.message}`);
+    counts[table] = count ?? 0;
+  }
+  return counts;
+}
+
+function withTimeout(promise, timeoutMs, message) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      setTimeout(() => reject(new Error(message)), timeoutMs);
+    })
+  ]);
 }
 
 async function saveShow(show) {
@@ -190,6 +253,7 @@ async function saveShow(show) {
       if (error) return { ok: false, message: error.message };
     }
 
+    state.remoteCounts = null;
     state.shows = await loadShows();
     return { ok: true };
   } catch (error) {
@@ -205,6 +269,7 @@ async function deleteShow(id) {
   if (!canEdit()) return { ok: false, message: "This account can view entries but cannot delete them." };
   const { error } = await state.supabase.from("shows").delete().eq("id", id);
   if (error) return { ok: false, message: error.message };
+  state.remoteCounts = null;
   state.shows = await loadShows();
   return { ok: true };
 }
@@ -220,8 +285,6 @@ function remoteToShow(row) {
     adaptedBy: row.adapted_by,
     director: row.director,
     theatre: row.theatre,
-    runStart: row.run_start,
-    runEnd: row.run_end,
     attendees: (row.show_attendees || []).map((item) => item.attendee),
     notes: row.notes,
     cast: (row.cast_members || [])
@@ -242,8 +305,6 @@ function showToRemote(show) {
       adapted_by: show.adaptedBy || null,
       director: show.director || null,
       theatre: show.theatre || null,
-      run_start: show.runStart || null,
-      run_end: show.runEnd || null,
       notes: show.notes || null
     },
     cast: show.cast.map((row, index) => ({
@@ -278,6 +339,7 @@ function render() {
     renderAuth();
     return;
   }
+  updateNavigationState();
   const route = getRoute();
   document.querySelectorAll("[data-route]").forEach((button) => {
     button.classList.toggle("is-active", button.dataset.route === topLevelRoute(route.name));
@@ -293,12 +355,23 @@ function render() {
   renderSearch();
 }
 
+function renderLoading(message) {
+  updateNavigationState();
+  app.innerHTML = `
+    <section class="panel auth-panel">
+      <h2>Loading</h2>
+      <p class="small">${escapeHtml(message || (state.online && state.session ? "Loading shared Supabase records..." : "Loading theatre records..."))}</p>
+    </section>
+  `;
+}
+
 function renderAuth() {
-  document.querySelectorAll("[data-route]").forEach((button) => button.classList.remove("is-active"));
+  updateNavigationState();
   app.innerHTML = `
     <section class="panel auth-panel">
       <h2>Sign In</h2>
       <p class="small">Access is limited to invited accounts. Enter your email address and Supabase will send you a sign-in link.</p>
+      <p class="small warning-text">Supabase is configured, so local JSON fallback is paused until sign-in succeeds.</p>
       <form id="auth-form" class="form-grid">
         <label class="wide">
           <span>Email</span>
@@ -321,6 +394,16 @@ function renderAuth() {
       options: { emailRedirectTo: location.origin + location.pathname }
     });
     status.textContent = error ? error.message : "Check your email for the sign-in link.";
+  });
+}
+
+function updateNavigationState() {
+  const signedOutOnline = state.online && !state.session;
+  const nav = document.querySelector(".tabs");
+  if (nav) nav.classList.toggle("is-hidden", signedOutOnline);
+  document.querySelectorAll("[data-route]").forEach((button) => {
+    button.disabled = false;
+    if (signedOutOnline) button.classList.remove("is-active");
   });
 }
 
@@ -396,7 +479,6 @@ function renderSearch() {
             <option value="adaptedBy">Adapted by</option>
             <option value="director">Director</option>
             <option value="theatre">Theatre</option>
-            <option value="run">Run</option>
             <option value="attendees">Attendees</option>
             <option value="notes">Notes</option>
           </select>
@@ -480,7 +562,7 @@ function matchingEntities(query, field, attendee) {
 
 function entitySearchFields(field) {
   if (field === "all") {
-    return ["actor", "character", "dateSeen", "book", "music", "lyrics", "adaptedBy", "director", "theatre", "run", "attendees", "notes"];
+    return ["actor", "character", "dateSeen", "book", "music", "lyrics", "adaptedBy", "director", "theatre", "attendees", "notes"];
   }
   if (field === "cast") return ["actor", "character"];
   if (field === "play") return [];
@@ -506,7 +588,6 @@ function searchableValues(show, field = "all") {
     adaptedBy: [show.adaptedBy],
     director: [show.director],
     theatre: [show.theatre],
-    run: [formatRun(show)],
     attendees: show.attendees,
     notes: [show.notes],
     actor: show.cast.map((row) => row.actor),
@@ -538,7 +619,6 @@ function renderShow(id) {
           ${detailRow("Adapted by", show.adaptedBy)}
           ${detailRow("Director", show.director)}
           ${detailRow("Theatre", show.theatre)}
-          ${detailRow("Run", formatRun(show))}
           ${detailRow("Attendees", show.attendees.join(", "))}
           ${detailRow("Notes", show.notes)}
         </dl>
@@ -611,8 +691,6 @@ function renderForm(id = "") {
         ${inputField("adaptedBy", "Adapted by", show.adaptedBy)}
         ${inputField("director", "Director", show.director)}
         ${inputField("theatre", "Theatre", show.theatre)}
-        ${inputField("runStart", "Run start", show.runStart, "date")}
-        ${inputField("runEnd", "Run end", show.runEnd, "date")}
         <div class="wide">
           <span class="field-label">Attendees</span>
           <div class="attendee-list">
@@ -642,6 +720,7 @@ function renderForm(id = "") {
   `;
 
   bindAccountBar();
+  removeLegacyRunRangeFields();
   const castRows = app.querySelector("#cast-rows");
   (show.cast.length ? show.cast : [{ character: "", actor: "" }]).forEach((row) => addCastRow(castRows, row));
   app.querySelector("#add-cast-row").addEventListener("click", () => addCastRow(castRows));
@@ -668,6 +747,12 @@ function renderForm(id = "") {
     }
     status.textContent = "Saved.";
     navigate(`show/${encodeURIComponent(saved.id)}`);
+  });
+}
+
+function removeLegacyRunRangeFields() {
+  app.querySelectorAll('[name="runStart"], [name="runEnd"]').forEach((input) => {
+    input.closest("label")?.remove();
   });
 }
 
@@ -703,8 +788,6 @@ function readShowForm(form, id) {
     adaptedBy: clean(data.get("adaptedBy")),
     director: clean(data.get("director")),
     theatre: clean(data.get("theatre")),
-    runStart: clean(data.get("runStart")),
-    runEnd: clean(data.get("runEnd")),
     attendees: data.getAll("attendees").map(clean),
     notes: clean(data.get("notes")),
     cast
@@ -870,7 +953,6 @@ function entityValues(show, field) {
     adaptedBy: () => [{ value: show.adaptedBy, detail: show.play }],
     director: () => [{ value: show.director, detail: show.theatre }],
     theatre: () => [{ value: show.theatre, detail: formatDate(show.dateSeen) }],
-    run: () => [{ value: formatRun(show), detail: show.theatre }],
     attendees: () => show.attendees.map((name) => ({ value: name, detail: formatDate(show.dateSeen) })),
     notes: () => [{ value: show.notes, detail: show.play }]
   };
@@ -888,7 +970,6 @@ function entityDefinition(field) {
     adaptedBy: { label: "Adapted by" },
     director: { label: "Director" },
     theatre: { label: "Theatre" },
-    run: { label: "Run" },
     attendees: { label: "Attendee" },
     notes: { label: "Notes" }
   }[field] || { label: "Result" };
@@ -918,6 +999,10 @@ function renderTools() {
             <dd>${escapeHtml(dataSourceLabel())}</dd>
           </div>
           <div>
+            <dt>Fallback source</dt>
+            <dd>${escapeHtml(state.localDataSource || "Not used")}</dd>
+          </div>
+          <div>
             <dt>Entries loaded</dt>
             <dd>${state.shows.length}</dd>
           </div>
@@ -933,10 +1018,27 @@ function renderTools() {
             <dt>Role</dt>
             <dd>${escapeHtml(state.userRole || "not signed in")}</dd>
           </div>
+          <div>
+            <dt>Supabase shows</dt>
+            <dd id="count-shows">${remoteCountLabel("shows")}</dd>
+          </div>
+          <div>
+            <dt>Supabase cast rows</dt>
+            <dd id="count-cast_members">${remoteCountLabel("cast_members")}</dd>
+          </div>
+          <div>
+            <dt>Supabase attendee links</dt>
+            <dd id="count-show_attendees">${remoteCountLabel("show_attendees")}</dd>
+          </div>
+          <div>
+            <dt>Supabase app users</dt>
+            <dd id="count-app_users">${remoteCountLabel("app_users")}</dd>
+          </div>
         </dl>
+        <p id="remote-count-status" class="status">${escapeHtml(state.remoteCountsStatus)}</p>
         ${state.online && state.session
           ? `<p class="small">Changes are saved to the shared Supabase database.</p>`
-          : `<p class="small warning-text">Changes are not currently using the shared Supabase database.</p>`}
+          : `<p class="small warning-text">Changes are not currently using the shared Supabase database. The local fallback only runs when Supabase is unavailable or not configured.</p>`}
       </article>
       <article class="panel">
         <h2>Data Tools</h2>
@@ -969,11 +1071,37 @@ function renderTools() {
   `;
 
   bindAccountBar();
+  refreshRemoteCounts();
   app.querySelector("#export-json").addEventListener("click", exportJson);
   app.querySelector("#import-json").addEventListener("change", importJson);
   app.querySelector("#reset-data").addEventListener("click", resetData);
   app.querySelector("#fetch-page").addEventListener("click", fetchPage);
   app.querySelector("#parse-page").addEventListener("click", parsePageDraft);
+}
+
+function remoteCountLabel(table) {
+  if (!state.online) return "Local mode";
+  if (!state.session) return "Sign in required";
+  if (!state.remoteCounts) return "Checking...";
+  return state.remoteCounts[table] ?? 0;
+}
+
+async function refreshRemoteCounts() {
+  if (!state.online || !state.session || state.remoteCounts) return;
+  const status = app.querySelector("#remote-count-status");
+  try {
+    state.remoteCountsStatus = "Checking Supabase row counts...";
+    if (status) status.textContent = state.remoteCountsStatus;
+    state.remoteCounts = await loadRemoteCounts();
+    state.remoteCountsStatus = "Supabase row counts confirmed.";
+  } catch (error) {
+    state.remoteCountsStatus = `Supabase count check failed: ${error.message}`;
+  }
+  for (const table of ["shows", "cast_members", "show_attendees", "app_users"]) {
+    const node = app.querySelector(`#count-${table}`);
+    if (node) node.textContent = remoteCountLabel(table);
+  }
+  if (status) status.textContent = state.remoteCountsStatus;
 }
 
 function exportJson() {
@@ -1003,6 +1131,7 @@ async function importJson(event) {
         return;
       }
     }
+    state.remoteCounts = null;
     state.shows = await loadShows();
     app.querySelector("#tool-status").textContent = `Imported ${parsed.shows?.length || 0} entries into Supabase.`;
     return;
@@ -1105,11 +1234,6 @@ function formatDate(value) {
   const date = new Date(`${value}T00:00:00`);
   if (Number.isNaN(date.getTime())) return value;
   return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric" }).format(date);
-}
-
-function formatRun(show) {
-  if (!show.runStart && !show.runEnd) return "";
-  return compact([formatDate(show.runStart), formatDate(show.runEnd)]).join(" to ");
 }
 
 function clean(value) {

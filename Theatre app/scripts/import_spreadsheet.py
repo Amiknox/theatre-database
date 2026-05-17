@@ -67,8 +67,6 @@ def import_rows(frame):
             "adaptedBy": clean(row.iloc[3] if len(row) > 3 else ""),
             "director": clean(row.iloc[4] if len(row) > 4 else ""),
             "theatre": clean(row.iloc[5] if len(row) > 5 else ""),
-            "runStart": "",
-            "runEnd": "",
             "attendees": [],
             "notes": "",
             "cast": [],

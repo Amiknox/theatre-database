@@ -43,6 +43,8 @@ This app supports two modes:
 - Local mode: empty `config.js`, using `data/shows.json` plus browser storage.
 - Hosted mode: `config.js` contains Supabase project settings, requiring email sign-in and reading/writing shared Supabase tables.
 
+When Supabase is configured but the user is signed out, the local JSON fallback is intentionally paused. This keeps sign-in failures visible instead of making the app appear to work from stale browser data.
+
 ### Supabase setup
 
 1. Create a Supabase project.
@@ -51,6 +53,8 @@ This app supports two modes:
 4. Run `supabase/seed.sql`.
 5. In Authentication -> URL Configuration, add your Netlify production URL to the allowed redirect URLs.
 6. In Authentication -> Providers, make sure Email is enabled. Magic links are the simplest sign-in option.
+
+After sign-in, the Tools screen shows exact Supabase row counts for `shows`, `cast_members`, `show_attendees`, and `app_users`.
 
 Initial access is set in `supabase/schema.sql`:
 
@@ -74,6 +78,10 @@ Role meanings:
 5. Deploy the site.
 
 The Supabase anon key is intended to be public in browser apps when Row Level Security is enabled. Do not put the Supabase service role key in Netlify or frontend code.
+
+### Legacy table cleanup
+
+Older setup work may have left a single unused `public."Theatre"` table in Supabase. Once the normalized tables above have been verified, run `supabase/cleanup_old_theatre_table.sql` in the Supabase SQL editor to remove it.
 
 ### Updating access later
 
