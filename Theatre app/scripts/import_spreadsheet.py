@@ -64,6 +64,7 @@ def import_rows(frame):
             "book": clean(row.iloc[2] if len(row) > 2 else ""),
             "music": "",
             "lyrics": "",
+            "basedOn": "",
             "adaptedBy": clean(row.iloc[3] if len(row) > 3 else ""),
             "director": clean(row.iloc[4] if len(row) > 4 else ""),
             "theatre": clean(row.iloc[5] if len(row) > 5 else ""),

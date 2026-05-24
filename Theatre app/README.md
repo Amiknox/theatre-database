@@ -1,6 +1,6 @@
 # Theatre Database
 
-A local browser app for recording theatre visits, cast pairings, attendees, and notes.
+A browser app for recording theatre visits, cast pairings, attendees, and notes in the live Supabase database.
 
 ## Run the app
 
@@ -12,15 +12,21 @@ python -m http.server 4173
 
 Then open `http://localhost:4173`.
 
-## Import the initial spreadsheet
+## Database source of truth
 
-Place the spreadsheet in this folder, then run:
+The live Supabase project is the source of truth. Spreadsheet files are source/import artifacts only and are intentionally ignored by Git.
+
+The app reads and writes the normalized Supabase tables in `supabase/schema.sql`. The local `data/shows.json` and import/export scripts are legacy migration aids, not the active database.
+
+## Legacy spreadsheet import
+
+For one-off migration work, place a spreadsheet in this folder, then run:
 
 ```powershell
 & "C:\Users\amikn\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe" scripts\import_spreadsheet.py ".\YOUR-SPREADSHEET.xlsx"
 ```
 
-This writes `data/shows.json`. Reload the app and use Tools -> Reset Local Data if the browser has already cached an older local copy.
+This writes `data/shows.json`. `Music`, `Lyrics`, and `Based on` are not present in the source spreadsheet, so they are left blank. Use `scripts/export_supabase_seed.py` only when intentionally regenerating the SQL seed for a fresh Supabase setup.
 
 The importer maps:
 
@@ -38,12 +44,9 @@ Scraping theatre websites is feasible, but it should be treated as assisted impo
 
 ## Hosting with Netlify and Supabase
 
-This app supports two modes:
+This app expects `config.js` to contain Supabase project settings. Users sign in by email and read/write the shared Supabase tables.
 
-- Local mode: empty `config.js`, using `data/shows.json` plus browser storage.
-- Hosted mode: `config.js` contains Supabase project settings, requiring email sign-in and reading/writing shared Supabase tables.
-
-When Supabase is configured but the user is signed out, the local JSON fallback is intentionally paused. This keeps sign-in failures visible instead of making the app appear to work from stale browser data.
+When Supabase is unavailable or the user is signed out, database reads and writes are paused. This keeps configuration or sign-in failures visible instead of making the app appear to work from stale local data.
 
 ### Supabase setup
 
