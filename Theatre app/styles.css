@@ -186,8 +186,15 @@ label span,
 
 .result-card,
 .entity-card {
-  padding: 16px;
+  padding: 18px 20px;
   text-align: left;
+}
+
+.result-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 190px;
 }
 
 .result-card button,
@@ -199,6 +206,44 @@ label span,
   padding: 0;
   font-weight: 800;
   text-align: left;
+}
+
+.result-card > button {
+  font-size: 1.05rem;
+  line-height: 1.22;
+}
+
+.card-venue,
+.card-director,
+.card-summary {
+  margin: 0;
+}
+
+.card-venue,
+.card-director {
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1.35;
+}
+
+.card-venue span {
+  color: var(--accent-strong);
+  font-weight: 800;
+}
+
+.card-summary {
+  color: var(--ink);
+  font-size: 1rem;
+  line-height: 1.4;
+  margin-top: 4px;
+}
+
+.card-attendees {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: auto;
+  padding-top: 8px;
 }
 
 .meta {

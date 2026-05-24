@@ -550,14 +550,22 @@ function drawResults(shows) {
   results.innerHTML = shows.map((show) => `
     <article class="result-card">
       <button type="button" data-show="${show.id}">${escapeHtml(show.play || "Untitled play")}</button>
-      <p class="meta">${compact([formatDate(show.dateSeen), show.theatre, show.director]).map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</p>
-      <p>${escapeHtml(firstFilled(show.notes, show.book, show.basedOn, show.adaptedBy, "No notes recorded."))}</p>
-      <div class="meta">${show.attendees.map((name) => `<span class="pill">${escapeHtml(name)}</span>`).join("")}</div>
+      ${renderDateTheatreMeta(show)}
+      ${show.director ? `<p class="card-director">Director: ${escapeHtml(show.director)}</p>` : ""}
+      <p class="card-summary">${escapeHtml(firstFilled(show.notes, show.book, show.basedOn, show.adaptedBy, "No notes recorded."))}</p>
+      <div class="card-attendees">${show.attendees.map((name) => `<span class="pill">${escapeHtml(name)}</span>`).join("")}</div>
     </article>
   `).join("");
   results.querySelectorAll("[data-show]").forEach((button) => {
     button.addEventListener("click", () => navigate(`show/${encodeURIComponent(button.dataset.show)}`));
   });
+}
+
+function renderDateTheatreMeta(show) {
+  const date = formatDate(show.dateSeen);
+  const theatre = clean(show.theatre);
+  if (date && theatre) return `<p class="card-venue">${escapeHtml(date)} <span>@</span> ${escapeHtml(theatre)}</p>`;
+  return date || theatre ? `<p class="card-venue">${escapeHtml(date || theatre)}</p>` : "";
 }
 
 function drawEntityResults(entities) {
@@ -879,7 +887,8 @@ function renderActor(name) {
         ${credits.length ? credits.map(({ show, character }) => `
           <article class="result-card">
             <button type="button" data-show="${show.id}">${escapeHtml(show.play || "Untitled play")}</button>
-            <p class="meta">${compact([character, formatDate(show.dateSeen), show.theatre]).map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</p>
+            ${renderDateTheatreMeta(show)}
+            ${character ? `<p class="card-summary">${escapeHtml(character)}</p>` : ""}
           </article>
         `).join("") : `<div class="empty-state">No credits recorded.</div>`}
       </div>
@@ -908,7 +917,8 @@ function renderEntity(encoded) {
         ${credits.length ? credits.map((credit) => `
           <article class="result-card">
             <button type="button" data-show="${credit.show.id}">${escapeHtml(credit.show.play || "Untitled play")}</button>
-            <p class="meta">${compact([credit.detail, formatDate(credit.show.dateSeen), credit.show.theatre]).map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</p>
+            ${renderDateTheatreMeta(credit.show)}
+            ${credit.detail ? `<p class="card-summary">${escapeHtml(credit.detail)}</p>` : ""}
           </article>
         `).join("") : `<div class="empty-state">No matching entries recorded.</div>`}
       </div>
@@ -1264,7 +1274,15 @@ function formatDate(value) {
   if (!value) return "";
   const date = new Date(`${value}T00:00:00`);
   if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric" }).format(date);
+  const month = new Intl.DateTimeFormat("en-US", { month: "short" }).format(date);
+  const day = date.getDate();
+  return `${month} ${day}${ordinalSuffix(day)} ${date.getFullYear()}`;
+}
+
+function ordinalSuffix(value) {
+  const lastTwo = value % 100;
+  if (lastTwo >= 11 && lastTwo <= 13) return "th";
+  return { 1: "st", 2: "nd", 3: "rd" }[value % 10] || "th";
 }
 
 function clean(value) {
