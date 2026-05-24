@@ -289,13 +289,14 @@ label:has([name="runEnd"]) {
 
 .cast-edit-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 76px minmax(0, 1fr) 40px;
+  grid-template-columns: minmax(0, 1fr) 40px minmax(0, 1fr) 40px;
   gap: 10px;
   align-items: end;
 }
 
 .swap-cast {
-  padding: 0 10px;
+  font-size: 1.25rem;
+  line-height: 1;
 }
 
 .attendee-list {

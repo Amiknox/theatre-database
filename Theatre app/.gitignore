@@ -1,1 +1,6 @@
 notes.txt
+Theatre.xlsx
+*.xlsx
+archive/
+__pycache__/
+*.pyc
