@@ -551,7 +551,6 @@ function drawResults(shows) {
     <article class="result-card">
       <button type="button" data-show="${show.id}">${escapeHtml(show.play || "Untitled play")}</button>
       ${renderDateTheatreMeta(show)}
-      ${show.director ? `<p class="card-director">Director: ${escapeHtml(show.director)}</p>` : ""}
       <p class="card-summary">${escapeHtml(firstFilled(show.notes, show.book, show.basedOn, show.adaptedBy, "No notes recorded."))}</p>
       <div class="card-attendees">${show.attendees.map((name) => `<span class="pill">${escapeHtml(name)}</span>`).join("")}</div>
     </article>
@@ -564,7 +563,7 @@ function drawResults(shows) {
 function renderDateTheatreMeta(show) {
   const date = formatDate(show.dateSeen);
   const theatre = clean(show.theatre);
-  if (date && theatre) return `<p class="card-venue">${escapeHtml(date)} <span>@</span> ${escapeHtml(theatre)}</p>`;
+  if (date && theatre) return `<p class="card-venue">${escapeHtml(date)} <span>at the</span> ${escapeHtml(theatre)}</p>`;
   return date || theatre ? `<p class="card-venue">${escapeHtml(date || theatre)}</p>` : "";
 }
 
