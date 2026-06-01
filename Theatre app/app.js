@@ -28,6 +28,7 @@ let state = {
   remoteCountsStatus: "",
   basedOnColumnAvailable: true
 };
+let authChangeId = 0;
 
 const app = document.querySelector("#app");
 const castTemplate = document.querySelector("#cast-row-template");
@@ -78,21 +79,40 @@ async function initSupabase() {
     );
     state.session = data.session;
     state.userRole = await loadUserRole();
-    state.supabase.auth.onAuthStateChange(async (_event, session) => {
-      state.session = session;
-      state.userRole = await loadUserRole();
-      state.loaded = false;
-      renderLoading();
-      state.shows = session ? await loadShows() : [];
-      state.remoteCounts = null;
-      state.remoteCountsStatus = "";
-      state.loaded = true;
-      render();
+    state.supabase.auth.onAuthStateChange((event, session) => {
+      setTimeout(() => handleAuthChange(event, session), 0);
     });
   } catch (error) {
     state.authMessage = `Supabase could not start: ${error.message}`;
     state.online = false;
     state.supabase = null;
+  }
+}
+
+async function handleAuthChange(event, session) {
+  const previousUserId = state.session?.user?.id || "";
+  const nextUserId = session?.user?.id || "";
+  const sameSignedInUser = previousUserId && previousUserId === nextUserId;
+  state.session = session;
+
+  if (event === "INITIAL_SESSION" || event === "TOKEN_REFRESHED" || event === "USER_UPDATED" || sameSignedInUser) {
+    return;
+  }
+
+  const changeId = ++authChangeId;
+  state.loaded = false;
+  renderLoading(session ? "Refreshing shared Supabase records..." : "Signing out...");
+  try {
+    state.userRole = await loadUserRole();
+    state.shows = session ? await loadShows() : [];
+    state.remoteCounts = null;
+    state.remoteCountsStatus = "";
+  } catch (error) {
+    state.authMessage = error.message || "Supabase session update failed.";
+  } finally {
+    if (changeId !== authChangeId) return;
+    state.loaded = true;
+    render();
   }
 }
 
@@ -550,8 +570,7 @@ function drawResults(shows) {
   results.innerHTML = shows.map((show) => `
     <article class="result-card">
       <button type="button" data-show="${show.id}">${escapeHtml(show.play || "Untitled play")}</button>
-      ${renderDateTheatreMeta(show)}
-      <p class="card-summary">${escapeHtml(firstFilled(show.notes, show.book, show.basedOn, show.adaptedBy, "No notes recorded."))}</p>
+      ${renderSearchCardDetails(show)}
       <div class="card-attendees">${show.attendees.map((name) => `<span class="pill">${escapeHtml(name)}</span>`).join("")}</div>
     </article>
   `).join("");
@@ -560,11 +579,21 @@ function drawResults(shows) {
   });
 }
 
+function renderSearchCardDetails(show) {
+  return [
+    show.book ? `<p class="card-summary">${escapeHtml(show.book)}</p>` : "",
+    show.dateSeen ? `<p class="card-venue">${escapeHtml(formatDate(show.dateSeen))}</p>` : "",
+    show.theatre ? `<p class="card-venue"><span>At the</span> ${escapeHtml(show.theatre)}</p>` : ""
+  ].join("");
+}
+
 function renderDateTheatreMeta(show) {
   const date = formatDate(show.dateSeen);
   const theatre = clean(show.theatre);
-  if (date && theatre) return `<p class="card-venue">${escapeHtml(date)} <span>at the</span> ${escapeHtml(theatre)}</p>`;
-  return date || theatre ? `<p class="card-venue">${escapeHtml(date || theatre)}</p>` : "";
+  return [
+    date ? `<p class="card-venue">${escapeHtml(date)}</p>` : "",
+    theatre ? `<p class="card-venue"><span>At the</span> ${escapeHtml(theatre)}</p>` : ""
+  ].join("");
 }
 
 function drawEntityResults(entities) {

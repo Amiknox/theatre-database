@@ -147,6 +147,22 @@ on public.show_attendees for delete
 to authenticated
 using (public.current_app_role() in ('editor', 'admin'));
 
+grant usage on schema public to authenticated;
+
+grant select, insert, update, delete on public.app_users to authenticated;
+grant select, insert, update, delete on public.shows to authenticated;
+grant select, insert, update, delete on public.cast_members to authenticated;
+grant select, insert, update, delete on public.show_attendees to authenticated;
+
+grant usage, select on all sequences in schema public to authenticated;
+grant execute on function public.current_app_role() to authenticated;
+
+alter default privileges in schema public
+grant select, insert, update, delete on tables to authenticated;
+
+alter default privileges in schema public
+grant usage, select on sequences to authenticated;
+
 insert into public.app_users (email, display_name, role)
 values
   ('amiknox@protonmail.com', 'Andrew', 'admin'),
